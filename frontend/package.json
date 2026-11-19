@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "api": "cd ../backend && python -m uvicorn server:app --port 8000",
+    "api": "cd ../backend && python server.py",
     "dev:all": "concurrently -k -n api,web \"npm:api\" \"npm:dev\"",
     "start:all": "concurrently -k -n api,web \"npm:api\" \"npm:start\""
   },

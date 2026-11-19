@@ -1,6 +1,11 @@
 # DCT Watermarking Lab
 
-Python algorithm (backend/) + Next.js interface (frontend/).
+Python algorithm & 6-layer DDD FastAPI backend (`backend/`) + Next.js interface (`frontend/`).
+
+## Configure with `.env`
+Both services include `.env.example` templates:
+- **Backend**: edit `backend/.env` or `backend/.env.local` (copied from `backend/.env.example`) to configure `APP_HOST`, `APP_PORT`, `CORS_ORIGINS`, `API_PREFIX`, `API_VERSION`, `STORAGE_DIR`, `STORAGE_TTL_SECONDS`, `MAX_UPLOAD_MB`, and watermark defaults.
+- **Frontend**: edit `frontend/.env.local` (copied from `frontend/.env.example`) to configure `API_PROXY_TARGET`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_API_PREFIX`, `NEXT_PUBLIC_APP_TITLE`, `NEXT_PUBLIC_REQUEST_TIMEOUT_MS`, and UI defaults.
 
 ## Run
     # 1) backend
@@ -8,10 +13,8 @@ Python algorithm (backend/) + Next.js interface (frontend/).
     # 2) frontend
     cd ../frontend && npm install
     # 3) both together
-    npm run dev:all          # UI on http://localhost:3000, Python API on :8000
+    npm run dev:all          # UI on http://localhost:3000, Python API on APP_HOST:APP_PORT
     # production: npm run build && npm run start:all
-
-If the API runs elsewhere: `WM_API_URL=http://host:8000 npm run dev`.
 
 ## What you can do in the UI
 Upload PNG/JPEG/WebP/BMP/GIF/TIFF -> choose standard, uploaded or text logo (binarised to 64x64)
