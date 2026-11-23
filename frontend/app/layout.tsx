@@ -1,8 +1,9 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { env } from "@/lib/env";
 
 export const metadata: Metadata = {
-  title: "DCT Watermarking Lab",
+  title: env.appTitle,
   description: "Embed and extract robust frequency-domain image watermarks in the browser.",
 };
 

@@ -1,6 +1,11 @@
 # DCT Watermarking Lab
 
-Python algorithm (backend/) + Next.js interface (frontend/).
+Python algorithm (`backend/`) + Next.js interface (`frontend/`).
+
+## Configure with `.env`
+Both services include `.env.example` templates:
+- **Backend**: edit `backend/.env` or `backend/.env.local` (see `backend/.env.example`) to configure `APP_HOST`, `APP_PORT`, `APP_TITLE`, `CORS_ORIGINS`, `STORAGE_DIR`, `STORAGE_TTL_SECONDS`, `CLEANUP_INTERVAL_SECONDS`, `MAX_UPLOAD_MB`, and watermark defaults (`DEFAULT_ALPHA`, `DEFAULT_NULL_TRIALS`, `MAX_NULL_TRIALS`).
+- **Frontend**: edit `frontend/.env.local` (see `frontend/.env.example`) to configure `API_PROXY_TARGET`, `PROXY_TIMEOUT_MS`, `MAX_BODY_SIZE`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_APP_TITLE`, `NEXT_PUBLIC_DEFAULT_ALPHA`, `NEXT_PUBLIC_DEFAULT_SECRET_KEY`, `NEXT_PUBLIC_DEFAULT_METHOD`, and `NEXT_PUBLIC_REQUEST_TIMEOUT_MS`.
 
 ## Run
     # 1) backend
@@ -8,10 +13,8 @@ Python algorithm (backend/) + Next.js interface (frontend/).
     # 2) frontend
     cd ../frontend && npm install
     # 3) both together
-    npm run dev:all          # UI on http://localhost:3000, Python API on :8000
+    npm run dev:all          # UI on http://localhost:3000, Python API on APP_HOST:APP_PORT
     # production: npm run build && npm run start:all
-
-If the API runs elsewhere: `WM_API_URL=http://host:8000 npm run dev`.
 
 ## What you can do in the UI
 Upload PNG/JPEG/WebP/BMP/GIF/TIFF -> choose standard, uploaded or text logo (binarised to 64x64)

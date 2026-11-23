@@ -1,3 +1,5 @@
+import { env } from "@/lib/env";
+
 export interface ImgInfo { id: string; name: string; width: number; height: number; format: string; bytes: number; blocks: number; copies: number }
 export type Method = "dct" | "lsb";
 export type Mode = "search" | "aligned";
@@ -12,9 +14,37 @@ export interface ExtractOut {
   offset?: [number, number]; phase?: [number, number];
 }
 
-async function call<T>(url: string, init?: RequestInit): Promise<T> {
+const apiUrl = (path: string) => `${env.apiUrl}${path}`;
+
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const timeoutMs = env.requestTimeoutMs;
+  if (!timeoutMs || timeoutMs <= 0) return fetch(url, init);
+  const controller = new AbortController();
+  const ext = init?.signal;
+  const onAbort = () => controller.abort();
+  if (ext) {
+    if (ext.aborted) controller.abort();
+    else ext.addEventListener("abort", onAbort, { once: true });
+  }
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (timedOut) throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s.`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    if (ext) ext.removeEventListener("abort", onAbort);
+  }
+}
+
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
-  try { res = await fetch(url, init); } catch { throw new Error("Cannot reach the Python backend. Start it with `npm run api` (port 8000)."); }
+  try { res = await fetchWithTimeout(apiUrl(path), init); } catch (err) {
+    if ((err as Error)?.name === "AbortError" || (err instanceof Error && err.message.startsWith("Request timed out"))) throw err;
+    throw new Error("Cannot reach the Python backend. Start it with `npm run api` (or check .env.local).");
+  }
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
     try {
@@ -63,13 +93,13 @@ export function extract(p: { imageId: string; key: string; alpha: number; method
 
 export async function logoPreview(l: LogoSpec, scale = 2, signal?: AbortSignal): Promise<{ blob: Blob; ink: number }> {
   const fd = new FormData(); logoFields(fd, l); fd.append("scale", String(scale));
-  const res = await fetch("/api/logo/preview", { method: "POST", body: fd, signal });
+  const res = await fetchWithTimeout(apiUrl("/api/logo/preview"), { method: "POST", body: fd, signal });
   if (!res.ok) { let m = "logo error"; try { m = (await res.json()).detail; } catch { /* */ } throw new Error(m); }
   return { blob: await res.blob(), ink: Number(res.headers.get("x-ink-pixels") ?? 0) };
 }
 
-export const previewUrl = (id: string, max = 900) => `/api/image/${id}/preview?max=${max}`;
-export const downloadUrl = (id: string) => `/api/image/${id}/download`;
+export const previewUrl = (id: string, max = 900) => apiUrl(`/api/image/${id}/preview?max=${max}`);
+export const downloadUrl = (id: string) => apiUrl(`/api/image/${id}/download`);
 export const health = () => call<{ ok: boolean }>("/api/health");
 
 export function saveBlob(blob: Blob, name: string) {

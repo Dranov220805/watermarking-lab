@@ -7,8 +7,9 @@ import {
   AttackOut, EmbedOut, ExtractOut, ImgInfo, LogoSpec, Method, Mode, STANDARD_LOGO,
   attack, downloadUrl, embed, extract, health, logoPreview, saveBlob,
 } from "@/lib/api";
+import { env } from "@/lib/env";
 
-const DEFAULT_ALPHA = 25;
+const DEFAULT_ALPHA = env.defaultAlpha;
 const scrollTo = (id: string) => setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
 const base = (n: string) => n.replace(/\.[^.]+$/, "") || "image";
 
@@ -22,9 +23,9 @@ export default function Home() {
   const [backend, setBackend] = useState<"checking" | "ok" | "down">("checking");
   useEffect(() => { health().then(() => setBackend("ok")).catch(() => setBackend("down")); }, []);
 
-  const [key, setKey] = useState("my-secret-key");
+  const [key, setKey] = useState(env.defaultSecretKey);
   const [alpha, setAlpha] = useState(DEFAULT_ALPHA);
-  const [method, setMethod] = useState<Method>("dct");
+  const [method, setMethod] = useState<Method>(env.defaultMethod);
 
   // embed
   const [src, setSrc] = useState<ImgInfo | null>(null);
@@ -101,7 +102,7 @@ export default function Home() {
   return (
     <main>
       <header>
-        <h1>DCT Watermarking Lab</h1>
+        <h1>{env.appTitle}</h1>
         <p>Embed a copyright logo in the frequency domain, attack the image (JPEG, crop, noise), then extract it again.
           All algorithm steps run in the Python backend (NumPy / OpenCV); this page is the interface.</p>
         {backend === "down" && <p className="err banner" data-testid="backend-down">Python backend not reachable. Start it with <code>npm run api</code> (port 8000), or use <code>npm run dev:all</code>.</p>}

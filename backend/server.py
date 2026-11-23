@@ -2,12 +2,12 @@
 FastAPI backend: every algorithm step (decode, logo, embed, attack, extract) runs
 in Python via wm.py. The Next.js frontend only draws the UI and calls these endpoints.
 
+    python server.py                      # uses APP_HOST / APP_PORT from .env
     uvicorn server:app --port 8000
 """
 import base64
 import io
 import os
-import shutil
 import tempfile
 import threading
 import time
@@ -22,17 +22,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from PIL import Image
 
+from config import settings
 import logos
 import wm
 
-app = FastAPI(title="DCT watermark API")
-app.add_middleware(CORSMiddleware, allow_origins=os.environ.get("WM_CORS", "http://localhost:3000").split(","),
-                   allow_methods=["*"], allow_headers=["*"])
+app = FastAPI(title=settings.app_title)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(settings.cors_origins),
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Ink-Pixels"],
+)
 
-STORE = Path(os.environ.get("WM_STORE") or tempfile.mkdtemp(prefix="wmstore_"))
+STORE = Path(settings.storage_dir or tempfile.mkdtemp(prefix="wmstore_"))
 STORE.mkdir(parents=True, exist_ok=True)
-TTL_SECONDS = 2 * 3600
-MAX_BYTES = 100 * 1024 * 1024
+TTL_SECONDS = settings.storage_ttl_seconds
+CLEANUP_INTERVAL = settings.cleanup_interval_seconds
+MAX_BYTES = settings.max_upload_bytes
 MIN_BLOCKS = wm.TILE * wm.TILE
 _meta: dict = {}
 _lock = threading.Lock()
@@ -73,7 +80,7 @@ def _load(iid: str) -> np.ndarray:
 
 def _cleanup_loop():
     while True:
-        time.sleep(600)
+        time.sleep(CLEANUP_INTERVAL)
         cutoff = time.time() - TTL_SECONDS
         with _lock:
             old = [k for k, m in _meta.items() if m["t"] < cutoff]
@@ -129,7 +136,7 @@ def health():
 def upload(file: UploadFile = File(...)):
     data = file.file.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
-        raise HTTPException(413, "file too large (limit 100 MB)")
+        raise HTTPException(413, f"file too large (limit {settings.max_upload_mb} MB)")
     try:
         im = Image.open(io.BytesIO(data))
         fmt = (im.format or "IMG").upper()
@@ -166,7 +173,7 @@ def logo_preview(logo_source: str = Form("standard"), logo_text: str = Form(""),
 
 
 @app.post("/api/embed")
-def api_embed(image_id: str = Form(...), key: str = Form(...), alpha: float = Form(wm.DEFAULT_ALPHA),
+def api_embed(image_id: str = Form(...), key: str = Form(...), alpha: float = Form(settings.default_alpha),
               method: str = Form("dct"), logo_source: str = Form("standard"), logo_text: str = Form(""),
               logo_threshold: int = Form(128), logo_invert: bool = Form(False),
               logo_file: Optional[UploadFile] = File(None)):
@@ -215,8 +222,9 @@ def api_attack(image_id: str = Form(...), crop_x: Optional[int] = Form(None), cr
 
 
 @app.post("/api/extract")
-def api_extract(image_id: str = Form(...), key: str = Form(...), alpha: float = Form(wm.DEFAULT_ALPHA),
-                method: str = Form("dct"), mode: str = Form("search"), null_trials: int = Form(40),
+def api_extract(image_id: str = Form(...), key: str = Form(...), alpha: float = Form(settings.default_alpha),
+                method: str = Form("dct"), mode: str = Form("search"),
+                null_trials: int = Form(settings.default_null_trials),
                 logo_source: str = Form("standard"), logo_text: str = Form(""),
                 logo_threshold: int = Form(128), logo_invert: bool = Form(False),
                 logo_file: Optional[UploadFile] = File(None)):
@@ -233,7 +241,7 @@ def api_extract(image_id: str = Form(...), key: str = Form(...), alpha: float = 
         r = wm.extract_aligned(img, key, method, alpha)
     else:
         ref = _logo(logo_source, logo_text, logo_threshold, logo_invert, logo_file)
-        r = wm.extract(img, ref, key, method, alpha, null_trials=max(0, min(200, null_trials)))
+        r = wm.extract(img, ref, key, method, alpha, null_trials=max(0, min(settings.max_null_trials, null_trials)))
         res.update(nc=_f(wm.nc(ref, r["logo"])), ber=_f(wm.ber(ref, r["logo"])), score=_f(r["score"]),
                    threshold=_f(r["threshold"]), null_mean=_f(r["null_mean"]), null_max=_f(r["null_max"]),
                    detected=r["detected"], offset=list(r["offset"]), phase=list(r["shift"]))
@@ -241,3 +249,9 @@ def api_extract(image_id: str = Form(...), key: str = Form(...), alpha: float = 
                logo_png="data:image/png;base64," + base64.b64encode(logos.to_png(r["logo"], 4)).decode(),
                seconds=round(time.time() - t, 2))
     return res
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("server:app", host=settings.app_host, port=settings.app_port)
