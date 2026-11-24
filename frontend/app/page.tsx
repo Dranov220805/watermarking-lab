@@ -38,6 +38,7 @@ export default function Home() {
   const [lab, setLab] = useState<ImgInfo | null>(null);
   const [cropOn, setCropOn] = useState(true);
   const [crop, setCrop] = useState({ x: "0", y: "0", w: "0", h: "0" });
+  const [overwriteOn, setOverwriteOn] = useState(false);
   const [noise, setNoise] = useState(0);
   const [jpegOn, setJpegOn] = useState(true);
   const [jpegQ, setJpegQ] = useState(70);
@@ -73,7 +74,7 @@ export default function Home() {
     try {
       const c = cropOn ? { x: +crop.x, y: +crop.y, w: +crop.w, h: +crop.h } : null;
       if (c && ![c.x, c.y, c.w, c.h].every(Number.isInteger)) throw new Error("Crop values must be whole numbers.");
-      setLabOut(await attack({ imageId: lab.id, crop: c, noise, jpeg: jpegOn ? jpegQ : 0 }));
+      setLabOut(await attack({ imageId: lab.id, crop: c, overwrite: overwriteOn, overwriteAlpha: alpha, noise, jpeg: jpegOn ? jpegQ : 0 }));
     } catch (e) { setLabErr((e as Error).message); }
     finally { setLabBusy(false); }
   }
@@ -182,6 +183,10 @@ export default function Home() {
                 <small>Odd offsets (not multiples of 8) are the realistic case.</small>
               </fieldset>
               <fieldset>
+                <legend><label className="check"><input type="checkbox" checked={overwriteOn} onChange={(e) => setOverwriteOn(e.target.checked)} data-testid="overwrite-on" /> Overwrite attack</label></legend>
+                <small>Attacker knows the algorithm and α: re-embeds random bits in every block.</small>
+              </fieldset>
+              <fieldset>
                 <legend>Gaussian noise</legend>
                 <label className="slider">σ = {noise}<input type="range" min={0} max={10} step={0.5} value={noise} onChange={(e) => setNoise(+e.target.value)} /></label>
               </fieldset>
@@ -201,7 +206,11 @@ export default function Home() {
         {labOut && (
           <div className="result" data-testid="lab-result">
             <Preview id={labOut.id} max={600} />
-            <div className="stats"><div><b>Applied</b> {labOut.desc}</div><div><b>Size</b> {labOut.width}×{labOut.height} · {labOut.format}</div></div>
+            <div className="stats">
+              <div><b>Applied</b> {labOut.desc}</div>
+              <div><b>Size</b> {labOut.width}×{labOut.height} · {labOut.format}</div>
+              {labOut.psnr != null && <div><b>PSNR vs input</b> {labOut.psnr.toFixed(2)} dB</div>}
+            </div>
             <div className="actions">
               <a className="btn" href={downloadUrl(labOut.id)} download={labOut.name}>Download {labOut.format}</a>
               <button onClick={() => { setExSource(labOut); scrollTo("extract"); }} data-testid="lab-to-extract">Send to extract →</button>

@@ -7,7 +7,7 @@ export interface LogoSpec { source: "standard" | "upload" | "text"; text: string
 export const STANDARD_LOGO: LogoSpec = { source: "standard", text: "", threshold: 128, invert: false, file: null };
 
 export interface EmbedOut extends ImgInfo { psnr: number | null; ssim: number | null; seconds: number }
-export interface AttackOut extends ImgInfo { desc: string }
+export interface AttackOut extends ImgInfo { desc: string; psnr: number | null }
 export interface ExtractOut {
   mode: Mode; blocks: number; copies: number; structure: number; structure_baseline: number; logo_png: string; seconds: number;
   nc?: number; ber?: number; score?: number; threshold?: number; null_mean?: number; null_max?: number; detected?: boolean;
@@ -76,10 +76,11 @@ export function embed(p: { imageId: string; key: string; alpha: number; method: 
   return call<EmbedOut>("/api/embed", { method: "POST", body: fd });
 }
 
-export function attack(p: { imageId: string; crop?: { x: number; y: number; w: number; h: number } | null; noise: number; jpeg: number }): Promise<AttackOut> {
+export function attack(p: { imageId: string; crop?: { x: number; y: number; w: number; h: number } | null; overwrite?: boolean; overwriteAlpha?: number; noise: number; jpeg: number }): Promise<AttackOut> {
   const fd = new FormData();
   fd.append("image_id", p.imageId);
   if (p.crop) { fd.append("crop_x", String(p.crop.x)); fd.append("crop_y", String(p.crop.y)); fd.append("crop_w", String(p.crop.w)); fd.append("crop_h", String(p.crop.h)); }
+  if (p.overwrite) { fd.append("overwrite", "true"); if (p.overwriteAlpha != null) fd.append("overwrite_alpha", String(p.overwriteAlpha)); }
   fd.append("noise_sigma", String(p.noise)); fd.append("jpeg_quality", String(p.jpeg));
   return call<AttackOut>("/api/attack", { method: "POST", body: fd });
 }

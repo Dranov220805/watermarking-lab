@@ -196,9 +196,11 @@ def api_embed(image_id: str = Form(...), key: str = Form(...), alpha: float = Fo
 @app.post("/api/attack")
 def api_attack(image_id: str = Form(...), crop_x: Optional[int] = Form(None), crop_y: Optional[int] = Form(None),
                crop_w: Optional[int] = Form(None), crop_h: Optional[int] = Form(None),
+               overwrite: bool = Form(False), overwrite_alpha: float = Form(settings.default_alpha),
                noise_sigma: float = Form(0.0), jpeg_quality: int = Form(0)):
     m = _get(image_id)
-    img = _load(image_id)
+    orig = _load(image_id)
+    img = orig
     parts = []
     if None not in (crop_x, crop_y, crop_w, crop_h):
         h, w = img.shape[:2]
@@ -206,6 +208,11 @@ def api_attack(image_id: str = Form(...), crop_x: Optional[int] = Form(None), cr
             raise HTTPException(400, f"crop must stay inside the image ({w}x{h}) and be at least 8x8")
         img = wm.attack_crop(img, crop_y, crop_x, crop_h, crop_w)
         parts.append(f"crop {crop_w}x{crop_h} @({crop_x},{crop_y})")
+    if overwrite:
+        if not 5 <= overwrite_alpha <= 100:
+            raise HTTPException(400, "overwrite alpha must be between 5 and 100")
+        img = wm.attack_overwrite(img, overwrite_alpha, seed=int(time.time()) & 0xFFFF)
+        parts.append(f"overwrite attack (random bits, alpha={overwrite_alpha:g})")
     if noise_sigma > 0:
         img = wm.attack_noise(img, noise_sigma, seed=int(time.time()) & 0xFFFF)
         parts.append(f"noise sigma={noise_sigma:g}")
@@ -215,10 +222,13 @@ def api_attack(image_id: str = Form(...), crop_x: Optional[int] = Form(None), cr
             raise HTTPException(400, "jpeg quality must be 1-100")
         ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, int(jpeg_quality)])
         parts.append(f"JPEG Q={jpeg_quality}")
+        final_img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
         info = _put(buf.tobytes(), "jpg", f"{base}_attacked.jpg", img.shape[1], img.shape[0], "JPEG")
     else:
+        final_img = img
         info = _put(_png_bytes(img), "png", f"{base}_attacked.png", img.shape[1], img.shape[0], "PNG")
-    return dict(info, desc=" -> ".join(parts) or "no attack")
+    atk_psnr = wm.psnr(orig, final_img) if (parts and final_img.shape == orig.shape) else None
+    return dict(info, desc=" -> ".join(parts) or "no attack", psnr=_f(atk_psnr))
 
 
 @app.post("/api/extract")

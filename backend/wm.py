@@ -296,6 +296,26 @@ def attack_noise(img, sigma, seed=0):
     return np.clip(img.astype(np.float64) + n, 0, 255).astype(np.uint8)
 
 
+def attack_overwrite(img_bgr, alpha=DEFAULT_ALPHA, seed=0):
+    """Attacker knows the DCT embedding rule and alpha: re-embeds independent
+    random bits in every 8x8 block to erase the owner's watermark."""
+    ycc = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2YCrCb)
+    y = ycc[..., 0].astype(np.float64)
+    blk, hb, wb = to_blocks(y)
+    c = dct_blocks(blk)
+    rng = np.random.default_rng(seed)
+    S = 2.0 * rng.integers(0, 2, size=(hb, wb)).astype(np.float64) - 1.0
+    d = c[:, :, P[0], P[1]] - c[:, :, Q[0], Q[1]]
+    deficit = np.maximum(alpha - S * d, 0.0)
+    shift = 0.5 * deficit * S
+    c[:, :, P[0], P[1]] += shift
+    c[:, :, Q[0], Q[1]] -= shift
+    y2 = y.copy()
+    y2[:hb * B, :wb * B] = from_blocks(idct_blocks(c))
+    ycc[..., 0] = np.clip(np.rint(y2), 0, 255).astype(np.uint8)
+    return cv2.cvtColor(ycc, cv2.COLOR_YCrCb2BGR)
+
+
 # --------------------------------------------------------------------------
 # Metrics
 # --------------------------------------------------------------------------
@@ -440,8 +460,11 @@ def run_demo(args):
             thumbs[m].append(logo_thumb(r["logo"], f"{name} NC={rows[-1]['NC']:.2f}"))
         print(f"  done: {name}")
 
-    # wrong-key extraction example
-    r_wrong = extract(attacks[3][1](marked["dct"]), logo, "WRONG-KEY", "dct", alpha)
+    # wrong-key extraction example (on JPEG Q=90) and overwrite attack
+    r_wrong = extract(attacks[1][1](marked["dct"]), logo, "WRONG-KEY", "dct", alpha)
+    ow_img = attack_overwrite(marked["dct"], alpha=alpha, seed=42)
+    ow_psnr = psnr(marked["dct"], ow_img)
+    r_ow = extract(ow_img, logo, key, "dct", alpha)
 
     # ---- outputs ----
     with open(os.path.join(args.out, "results.csv"), "w", newline="") as f:
@@ -463,6 +486,9 @@ def run_demo(args):
         md.append(f"- {r['method']}: PSNR = {r['PSNR_wm']:.2f} dB, SSIM = {r['SSIM_wm']:.4f}")
     md.append(f"\nWrong key on JPEG Q=90 image: NC = {nc(logo, r_wrong['logo']):.3f}, "
               f"BER = {ber(logo, r_wrong['logo']):.3f}, score = {r_wrong['score']:.4f}")
+    md.append(f"\nOverwrite attack (random bits, alpha={alpha:g}): PSNR vs watermarked = {ow_psnr:.2f} dB, "
+              f"NC = {nc(logo, r_ow['logo']):.3f}, BER = {ber(logo, r_ow['logo']):.3f}, "
+              f"score = {r_ow['score']:.4f}, detected = {'yes' if r_ow['score'] > thr else 'no'}")
     with open(os.path.join(args.out, "results.md"), "w") as f:
         f.write("\n".join(md) + "\n")
 
@@ -517,6 +543,7 @@ def main():
     e.add_argument("--method", choices=["dct", "lsb"], default="dct")
     a = sub.add_parser("attack"); a.add_argument("inp"); a.add_argument("out")
     a.add_argument("--jpeg", type=int); a.add_argument("--crop", type=int, nargs=4, metavar=("Y", "X", "H", "W"))
+    a.add_argument("--overwrite", action="store_true"); a.add_argument("--alpha", type=float, default=DEFAULT_ALPHA)
     a.add_argument("--noise", type=float)
     x = sub.add_parser("extract"); x.add_argument("inp"); common(x)
     x.add_argument("--method", choices=["dct", "lsb"], default="dct")
@@ -543,6 +570,8 @@ def main():
         img = cv2.imread(args.inp)
         if args.crop:
             img = attack_crop(img, *args.crop)
+        if args.overwrite:
+            img = attack_overwrite(img, alpha=args.alpha)
         if args.noise:
             img = attack_noise(img, args.noise)
         if args.jpeg:
