@@ -298,7 +298,7 @@ def attack_noise(img, sigma, seed=0):
 
 def attack_overwrite(img_bgr, alpha=DEFAULT_ALPHA, seed=0):
     """Attacker knows the DCT embedding rule and alpha: re-embeds independent
-    random bits in every 8x8 block to erase the owner's watermark."""
+    random bits in every 8x8 block symmetrically so no residual owner bias remains."""
     ycc = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2YCrCb)
     y = ycc[..., 0].astype(np.float64)
     blk, hb, wb = to_blocks(y)
@@ -306,8 +306,8 @@ def attack_overwrite(img_bgr, alpha=DEFAULT_ALPHA, seed=0):
     rng = np.random.default_rng(seed)
     S = 2.0 * rng.integers(0, 2, size=(hb, wb)).astype(np.float64) - 1.0
     d = c[:, :, P[0], P[1]] - c[:, :, Q[0], Q[1]]
-    deficit = np.maximum(alpha - S * d, 0.0)
-    shift = 0.5 * deficit * S
+    target = S * np.clip(np.abs(d), alpha, 2.0 * alpha)
+    shift = np.where((S * d) < alpha, 0.5 * (target - d), 0.0)
     c[:, :, P[0], P[1]] += shift
     c[:, :, Q[0], Q[1]] -= shift
     y2 = y.copy()

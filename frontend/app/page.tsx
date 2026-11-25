@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import CropSelector, { CropRect } from "@/components/CropSelector";
 import ImagePicker from "@/components/ImagePicker";
 import LogoPicker from "@/components/LogoPicker";
 import Preview from "@/components/Preview";
@@ -37,7 +38,7 @@ export default function Home() {
   // lab
   const [lab, setLab] = useState<ImgInfo | null>(null);
   const [cropOn, setCropOn] = useState(true);
-  const [crop, setCrop] = useState({ x: "0", y: "0", w: "0", h: "0" });
+  const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, w: 8, h: 8 });
   const [overwriteOn, setOverwriteOn] = useState(false);
   const [noise, setNoise] = useState(0);
   const [jpegOn, setJpegOn] = useState(true);
@@ -56,7 +57,11 @@ export default function Home() {
 
   function setLabSource(i: ImgInfo) {
     setLab(i); setLabOut(null); setLabErr("");
-    setCrop({ x: String(((i.width / 4) | 0) + 3), y: String(((i.height / 4) | 0) + 5), w: String(Math.max(8, (i.width / 2) | 0)), h: String(Math.max(8, (i.height / 2) | 0)) });
+    const w = Math.max(8, (i.width / 2) | 0);
+    const h = Math.max(8, (i.height / 2) | 0);
+    const x = Math.min(((i.width / 4) | 0) + 3, i.width - w);
+    const y = Math.min(((i.height / 4) | 0) + 5, i.height - h);
+    setCrop({ x, y, w, h });
   }
   function setExSource(i: ImgInfo) { setEx(i); setExRes(null); setExErr(""); }
 
@@ -72,8 +77,7 @@ export default function Home() {
     if (!lab) return;
     setLabErr(""); setLabOut(null); setLabBusy(true);
     try {
-      const c = cropOn ? { x: +crop.x, y: +crop.y, w: +crop.w, h: +crop.h } : null;
-      if (c && ![c.x, c.y, c.w, c.h].every(Number.isInteger)) throw new Error("Crop values must be whole numbers.");
+      const c = cropOn ? crop : null;
       setLabOut(await attack({ imageId: lab.id, crop: c, overwrite: overwriteOn, overwriteAlpha: alpha, noise, jpeg: jpegOn ? jpegQ : 0 }));
     } catch (e) { setLabErr((e as Error).message); }
     finally { setLabBusy(false); }
@@ -171,17 +175,11 @@ export default function Home() {
         {lab && (
           <>
             <div className="info">{lab.name} · {lab.width}×{lab.height} · {lab.format}</div>
+            <fieldset className="crop-fieldset">
+              <legend><label className="check"><input type="checkbox" checked={cropOn} onChange={(e) => setCropOn(e.target.checked)} data-testid="crop-on" /> Crop</label></legend>
+              <CropSelector image={lab} crop={crop} disabled={!cropOn} onChange={setCrop} />
+            </fieldset>
             <div className="grid3">
-              <fieldset>
-                <legend><label className="check"><input type="checkbox" checked={cropOn} onChange={(e) => setCropOn(e.target.checked)} /> Crop</label></legend>
-                <div className="grid4">
-                  {(["x", "y", "w", "h"] as const).map((k) => (
-                    <label key={k}>{k}<input type="number" value={crop[k]} disabled={!cropOn}
-                      onChange={(e) => setCrop({ ...crop, [k]: e.target.value })} data-testid={`crop-${k}`} /></label>
-                  ))}
-                </div>
-                <small>Odd offsets (not multiples of 8) are the realistic case.</small>
-              </fieldset>
               <fieldset>
                 <legend><label className="check"><input type="checkbox" checked={overwriteOn} onChange={(e) => setOverwriteOn(e.target.checked)} data-testid="overwrite-on" /> Overwrite attack</label></legend>
                 <small>Attacker knows the algorithm and α: re-embeds random bits in every block.</small>
